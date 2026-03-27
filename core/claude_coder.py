@@ -14,7 +14,7 @@ def gerar_latex(resumo_extraido: str) -> str:
         # Inicializa o cliente da Anthropic
         client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         
-        system_prompt = """
+        system_prompt = r"""
         Você é um autor técnico acadêmico e um mestre em formatação LaTeX.
         Sua tarefa é receber um resumo de passos de depuração de robótica (ROS 2) 
         e transformá-lo em um tutorial estruturado em LaTeX.
