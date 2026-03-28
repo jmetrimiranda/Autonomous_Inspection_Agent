@@ -25,7 +25,7 @@ def extrair_solucao(caminho_arquivo: str) -> str:
             return "Erro: Falha ao processar o arquivo no servidor do Gemini."
 
         # Instancia o modelo de contexto massivo
-        model = genai.GenerativeModel('gemini-1.5-pro-latest')
+        model = genai.GenerativeModel('gemini-3.1-pro-preview')
         
         # O Pão de Cima: Instrução ARC-Style (Roleplay e Passos Lógicos)
         LOG_SOLVER_PROMPT = """

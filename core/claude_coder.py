@@ -31,7 +31,7 @@ def gerar_latex(resumo_extraido: str) -> str:
         
         # Chamada ao Claude 3.5 Sonnet (SOTA para código e formatação)
         response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
+            model="claude-sonnet-4-6",
             max_tokens=4000,
             temperature=0.2, # Baixa temperatura para manter a precisão do código
             system=system_prompt,
