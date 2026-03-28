@@ -190,8 +190,7 @@ with st.sidebar:
                 f"🧪 A destilar {len(uploaded_files)} ficheiro(s)...", expanded=True
             ) as status:
                 for uf in uploaded_files:
-                    # Etapa 1: Upload para File API
-                    st.write(f"📤 **{uf.name}** — A enviar para File API...")
+                    st.write(f"📤 **{uf.name}** — Preparando destilação...")
                     extensao = os.path.splitext(uf.name)[1]
                     with tempfile.NamedTemporaryFile(
                         delete=False, suffix=extensao, prefix=uf.name.rsplit(".", 1)[0][:40] + "_"
@@ -200,19 +199,17 @@ with st.sidebar:
                         tmp_path = tmp_file.name
 
                     try:
-                        # Etapa 2: Destilação com Gemini
-                        st.write(f"🧠 **{uf.name}** — Destilando Golden Path (Gemini)...")
-                        caminho_destilado = destilar_log_bruto(tmp_path, ws_path_activo)
-
-                        # Etapa 3: Salvo localmente
-                        st.write(f"✅ **{uf.name}** → `{os.path.basename(caminho_destilado)}`")
+                        caminho_destilado = destilar_log_bruto(
+                            tmp_path, ws_path_activo,
+                            callback=lambda msg: st.write(msg),
+                        )
+                        st.write(f"💾 **{uf.name}** → `{os.path.basename(caminho_destilado)}`")
                     except Exception as e:
                         st.error(f"❌ Erro ao destilar **{uf.name}**: {e}")
                     finally:
                         if os.path.exists(tmp_path):
                             os.remove(tmp_path)
 
-                # Reseta o chat para usar a nova base
                 st.session_state.chat_session = None
                 st.session_state.mensagens_chat = []
                 status.update(label="✅ Destilação completa!", state="complete")
