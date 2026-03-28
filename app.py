@@ -248,9 +248,25 @@ if uploaded_files:
             # (Re)inicializa o Oráculo com todos os ficheiros
             if st.session_state.gemini_files:
                 st.write("🔮 A despertar o Oráculo com todos os documentos...")
-                st.session_state.chat_session = criar_sessao_oraculo(st.session_state.gemini_files)
-                st.session_state.mensagens_chat = []
-                status.update(label=f"✅ {len(st.session_state.gemini_files)} ficheiro(s) activo(s) — Agente pronto!", state="complete")
+                try:
+                    chat, carregados, excluidos = criar_sessao_oraculo(st.session_state.gemini_files)
+                    st.session_state.chat_session = chat
+                    st.session_state.mensagens_chat = []
+
+                    if excluidos:
+                        nomes_excl = [st.session_state.nomes_ficheiros[i] for i in excluidos]
+                        st.warning(
+                            f"⚠️ {len(excluidos)} ficheiro(s) excediam o limite de tokens e foram excluídos "
+                            f"do chat: **{', '.join(nomes_excl)}**. Tente ficheiros menores ou envie-os separadamente."
+                        )
+                        n_ok = len(carregados)
+                    else:
+                        n_ok = len(st.session_state.gemini_files)
+
+                    status.update(label=f"✅ {n_ok} ficheiro(s) activo(s) no Oráculo — Agente pronto!", state="complete")
+                except ValueError as e:
+                    st.error(f"❌ {e}")
+                    status.update(label="❌ Ficheiros demasiado grandes para o modelo", state="error")
             else:
                 status.update(label="❌ Nenhum ficheiro foi processado com sucesso", state="error")
 
