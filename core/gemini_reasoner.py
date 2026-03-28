@@ -7,29 +7,37 @@ from dotenv import load_dotenv
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+
 def extrair_solucao(caminho_arquivo: str) -> str:
     """
     Faz o upload do arquivo para o Gemini e extrai a solução usando
     técnicas de Prompt Sanduíche e ARC-style reasoning (Roleplay + CoT).
+    Mantido para compatibilidade com chamadas de arquivo único.
+    """
+    return extrair_solucao_multi([caminho_arquivo])
+
+
+def extrair_solucao_multi(caminhos_arquivos: list[str]) -> str:
+    """
+    Aceita uma lista de caminhos de arquivos, faz upload de todos
+    para o Gemini e extrai a solução consolidada.
     """
     try:
-        # SOTA: Usa a File API do Gemini (Aceita PDFs massivos e lê as imagens/textos nativamente)
-        gemini_file = genai.upload_file(path=caminho_arquivo)
-        
-        # Aguarda o modelo processar o documento (importante para PDFs muito grandes)
-        while gemini_file.state.name == "PROCESSING":
-            time.sleep(2)
-            gemini_file = genai.get_file(gemini_file.name)
-            
-        if gemini_file.state.name == "FAILED":
-            return "Erro: Falha ao processar o arquivo no servidor do Gemini."
+        gemini_files = []
+        for caminho in caminhos_arquivos:
+            gf = genai.upload_file(path=caminho)
+            # Aguarda cada ficheiro ficar pronto
+            while gf.state.name == "PROCESSING":
+                time.sleep(2)
+                gf = genai.get_file(gf.name)
+            if gf.state.name == "FAILED":
+                return f"Erro: Falha ao processar o arquivo '{caminho}' no servidor do Gemini."
+            gemini_files.append(gf)
 
-        # Instancia o modelo de contexto massivo
         model = genai.GenerativeModel('gemini-3.1-pro-preview')
-        
-        # O Pão de Cima: Instrução ARC-Style (Roleplay e Passos Lógicos)
+
         LOG_SOLVER_PROMPT = """
-        Você é um Engenheiro Sênior de Robótica e especialista em depuração de sistemas ROS 2 (Navigation2, AMCL, Odometria). 
+        Você é um Engenheiro Sênior de Robótica e especialista em depuração de sistemas ROS 2 (Navigation2, AMCL, Odometria).
         Sua tarefa é analisar logs de terminal brutos, históricos de conversa iterativos e imagens associadas para extrair estritamente a *solução final validada* que resolveu o problema do robô.
 
         Siga este processo iterativo:
@@ -49,26 +57,21 @@ def extrair_solucao(caminho_arquivo: str) -> str:
           * Inclua scripts ou comandos essenciais em blocos de código Markdown.
         """
 
-        # O Pão de Baixo: Reforço da Regra Crítica para evitar o "Lost in the Middle"
         INSTRUCAO_CRITICA = """
-        LEMBRE-SE (REGRA DE OURO): Isole APENAS a solução final validada. 
+        LEMBRE-SE (REGRA DE OURO): Isole APENAS a solução final validada.
         Você deve ignorar absolutamente todas as tentativas falhas, erros de compilação, imagens de robôs com pose errada e pacotes quebrados que ocorreram na linha do tempo. Extraia apenas a vitória.
         """
-        
-        # Montagem do Prompt Sanduíche (Passamos a lista de conteúdos para o modelo)
-        prompt_sanduiche = [
-            LOG_SOLVER_PROMPT,
-            gemini_file, # O arquivo (PDF/MD) entra como o 'recheio' da requisição
-            INSTRUCAO_CRITICA
-        ]
-        
-        # Geração da resposta
+
+        # Prompt sanduíche: instrução + todos os ficheiros + reforço
+        prompt_sanduiche = [LOG_SOLVER_PROMPT] + gemini_files + [INSTRUCAO_CRITICA]
+
         response = model.generate_content(prompt_sanduiche)
-        
-        # Boas práticas: deletar o arquivo do servidor do Google após o uso
-        genai.delete_file(gemini_file.name)
-        
+
+        # Limpa os ficheiros do servidor
+        for gf in gemini_files:
+            genai.delete_file(gf.name)
+
         return response.text
-        
+
     except Exception as e:
         return f"Erro na camada de reasoning (Gemini): {e}"
