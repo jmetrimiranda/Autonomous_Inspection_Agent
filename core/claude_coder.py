@@ -1,47 +1,65 @@
 import os
+import glob
 import anthropic
 from dotenv import load_dotenv
 
-# Carrega as variáveis de ambiente (.env)
 load_dotenv()
 
-def gerar_latex(resumo_extraido: str) -> str:
+
+def _carregar_base_conhecimento(workspace_path: str) -> str:
+    """Lê todos os ficheiros _distilled.md do workspace e concatena."""
+    ficheiros = sorted(glob.glob(os.path.join(workspace_path, "*_distilled.md")))
+    if not ficheiros:
+        return ""
+
+    partes = []
+    for f in ficheiros:
+        with open(f, "r", encoding="utf-8") as fh:
+            partes.append(fh.read())
+
+    return "\n\n---\n\n".join(partes)
+
+
+def gerar_latex(workspace_path: str) -> str:
     """
-    Recebe o resumo estruturado pelo Gemini e utiliza o Claude 3.5 Sonnet
-    para gerar o código LaTeX correspondente.
+    Lê a base de conhecimento destilada do workspace e gera
+    um tutorial LaTeX formatado usando Claude Sonnet 4.
     """
     try:
-        # Inicializa o cliente da Anthropic
+        base = _carregar_base_conhecimento(workspace_path)
+        if not base:
+            return "% Erro: Nenhum conhecimento destilado encontrado no workspace."
+
         client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        
+
         system_prompt = r"""
         Você é um autor técnico acadêmico e um mestre em formatação LaTeX.
-        Sua tarefa é receber um resumo de passos de depuração de robótica (ROS 2) 
-        e transformá-lo em um tutorial estruturado em LaTeX.
-        
-        REGRAS ESTritas:
+        Sua tarefa é receber uma base de conhecimento destilada sobre depuração de robótica (ROS 2)
+        e transformá-la em um tutorial estruturado em LaTeX.
+
+        REGRAS ESTRITAS:
         1. Gere APENAS código LaTeX válido. Não inclua conversas, introduções ou explicações fora do código LaTeX.
-        2. Comece com \documentclass{article} e inclua pacotes essenciais (ex: listings, xcolor, hyperref, geometry).
+        2. Comece com \documentclass{article} e inclua pacotes essenciais (listings, xcolor, hyperref, geometry).
         3. Estruture o documento com \section, \subsection e \textbf.
-        4. Todos os comandos de terminal e códigos devem estar dentro de blocos \begin{lstlisting}[language=bash] ou python.
-        5. Certifique-se de que o documento fecha com \end{document}.
+        4. Inclua uma seção de Pré-requisitos ANTES da seção de solução.
+        5. Todos os comandos de terminal e códigos devem estar dentro de blocos \begin{lstlisting}[language=bash] ou python.
+        6. Certifique-se de que o documento fecha com \end{document}.
         """
-        
-        user_prompt = f"Transforme o seguinte roteiro de solução no tutorial LaTeX completo:\n\n{resumo_extraido}"
-        
-        # Chamada ao Claude 3.5 Sonnet (SOTA para código e formatação)
+
+        user_prompt = (
+            "Transforme a seguinte base de conhecimento destilada no tutorial LaTeX completo:\n\n"
+            f"{base}"
+        )
+
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=4000,
-            temperature=0.2, # Baixa temperatura para manter a precisão do código
+            temperature=0.2,
             system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt}
-            ]
+            messages=[{"role": "user", "content": user_prompt}],
         )
-        
-        # Retorna apenas o texto gerado
+
         return response.content[0].text
-        
+
     except Exception as e:
         return f"% Erro na camada de geracao (Claude): {e}"
