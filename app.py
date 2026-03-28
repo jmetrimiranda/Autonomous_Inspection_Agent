@@ -6,7 +6,7 @@ import time
 import google.generativeai as genai
 from core.gemini_reasoner import extrair_solucao_multi
 from core.claude_coder import gerar_latex
-from core.oracle_chat import criar_sessao_oraculo
+from core.oracle_chat import criar_sessao_oraculo, deletar_cache
 
 # ── Configuração da Página ──────────────────────────────────────────
 st.set_page_config(
@@ -150,6 +150,7 @@ defaults = {
     "arquivos_processados": set(),
     "gemini_files": [],          # lista de gemini file objects
     "chat_session": None,
+    "oraculo_cache": None,       # referência ao Context Cache do Gemini
     "mensagens_chat": [],
     "resumo_gemini": None,
     "codigo_latex": None,
@@ -177,6 +178,9 @@ def typewriter(text, speed=0.015):
 
 
 def limpar_sessao():
+    # Libera o cache do Gemini antes de resetar
+    if st.session_state.get("oraculo_cache") is not None:
+        deletar_cache(st.session_state.oraculo_cache)
     for key, val in defaults.items():
         st.session_state[key] = type(val)() if isinstance(val, (set, list)) else val
 
@@ -245,28 +249,24 @@ if uploaded_files:
                 os.remove(tmp_file_path)
                 st.session_state.arquivos_processados.add(h)
 
-            # (Re)inicializa o Oráculo com todos os ficheiros
+            # (Re)inicializa o Oráculo com Context Caching (todos os ficheiros)
             if st.session_state.gemini_files:
-                st.write("🔮 A despertar o Oráculo com todos os documentos...")
+                st.write("🔮 A criar Context Cache com todos os documentos...")
                 try:
-                    chat, carregados, excluidos = criar_sessao_oraculo(st.session_state.gemini_files)
+                    # Libera cache anterior se existir
+                    if st.session_state.get("oraculo_cache") is not None:
+                        deletar_cache(st.session_state.oraculo_cache)
+
+                    chat, cache = criar_sessao_oraculo(st.session_state.gemini_files)
                     st.session_state.chat_session = chat
+                    st.session_state.oraculo_cache = cache
                     st.session_state.mensagens_chat = []
 
-                    if excluidos:
-                        nomes_excl = [st.session_state.nomes_ficheiros[i] for i in excluidos]
-                        st.warning(
-                            f"⚠️ {len(excluidos)} ficheiro(s) excediam o limite de tokens e foram excluídos "
-                            f"do chat: **{', '.join(nomes_excl)}**. Tente ficheiros menores ou envie-os separadamente."
-                        )
-                        n_ok = len(carregados)
-                    else:
-                        n_ok = len(st.session_state.gemini_files)
-
-                    status.update(label=f"✅ {n_ok} ficheiro(s) activo(s) no Oráculo — Agente pronto!", state="complete")
-                except ValueError as e:
-                    st.error(f"❌ {e}")
-                    status.update(label="❌ Ficheiros demasiado grandes para o modelo", state="error")
+                    n = len(st.session_state.gemini_files)
+                    status.update(label=f"✅ {n} ficheiro(s) em cache — Oráculo pronto!", state="complete")
+                except Exception as e:
+                    st.error(f"❌ Erro ao criar Context Cache: {e}")
+                    status.update(label="❌ Falha ao inicializar o Oráculo", state="error")
             else:
                 status.update(label="❌ Nenhum ficheiro foi processado com sucesso", state="error")
 
